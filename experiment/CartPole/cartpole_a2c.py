@@ -156,7 +156,7 @@ def main():
     
     eps = np.finfo(np.float32).eps.item()
     running_reward = 10
-    agent = A2CAgent(obs_shape=env.observation_space.shape[0], action_shape=env.action_space[0], gamma=args.gamma, model_type=args.model_type, device=args.device)
+    agent = A2CAgent(obs_shape=env.observation_space.shape[0], action_shape=env.action_space.n, gamma=args.gamma, model_type=args.model_type, device=args.device)
     optimizer = optim.Adam(agent.model.parameters(), lr=3e-2)
     logger = Logger(log_dir='./logs/'+args.task+'/'+args.model_type+'/a2c')
 
