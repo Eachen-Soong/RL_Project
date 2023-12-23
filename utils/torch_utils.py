@@ -1,36 +1,14 @@
-#######################################################################
-# Copyright (C) 2017 Shangtong Zhang(zhangshangtong.cpp@gmail.com)    #
-# Permission given to modify the code as long as you keep this        #
-# declaration at the top                                              #
-#######################################################################
-
-from .config import *
+import numpy as np
 import torch
 import os
 
 
-def select_device(gpu_id):
-    # if torch.cuda.is_available() and gpu_id >= 0:
-    if gpu_id >= 0:
-        Config.DEVICE = torch.device('cuda:%d' % (gpu_id))
-    else:
-        Config.DEVICE = torch.device('cpu')
-
-
-def tensor(x):
+def tensor(x, device):
     if isinstance(x, torch.Tensor):
         return x
     x = np.asarray(x, dtype=np.float32)
-    x = torch.from_numpy(x).to(Config.DEVICE)
+    x = torch.from_numpy(x).to(device)
     return x
-
-
-def range_tensor(end):
-    return torch.arange(end).long().to(Config.DEVICE)
-
-
-def to_np(t):
-    return t.cpu().detach().numpy()
 
 
 def random_seed(seed=None):
@@ -81,12 +59,6 @@ def batch_diagonal(input):
     return output
 
 
-def batch_trace(input):
-    i = range_tensor(input.size(-1))
-    t = input[:, i, i].sum(-1).unsqueeze(-1).unsqueeze(-1)
-    return t
-
-
 class DiagonalNormal:
     def __init__(self, mean, std):
         self.dist = torch.distributions.Normal(mean, std)
@@ -122,89 +94,3 @@ class BatchCategorical:
         ret = self.dist.sample(sample_shape)
         ret = ret.view(sample_shape + self.pre_shape + (-1,))
         return ret
-
-
-class Grad:
-    def __init__(self, network=None, grads=None):
-        if grads is not None:
-            self.grads = grads
-        else:
-            self.grads = []
-            for param in network.parameters():
-                self.grads.append(torch.zeros(param.data.size(), device=Config.DEVICE))
-
-    def add(self, op):
-        if isinstance(op, Grad):
-            for grad, op_grad in zip(self.grads, op.grads):
-                grad.add_(op_grad)
-        elif isinstance(op, torch.nn.Module):
-            for grad, param in zip(self.grads, op.parameters()):
-                if param.grad is not None:
-                    grad.add_(param.grad)
-        return self
-
-    def mul(self, coef):
-        for grad in self.grads:
-            grad.mul_(coef)
-        return self
-
-    def assign(self, network):
-        for grad, param in zip(self.grads, network.parameters()):
-            param._grad = grad.clone()
-
-    def zero(self):
-        for grad in self.grads:
-            grad.zero_()
-
-    def clone(self):
-        return Grad(grads=[grad.clone() for grad in self.grads])
-
-
-class Grads:
-    def __init__(self, network=None, n=0, grads=None):
-        if grads is not None:
-            self.grads = grads
-        else:
-            self.grads = [Grad(network) for _ in range(n)]
-
-    def clone(self):
-        return Grads(grads=[grad.clone() for grad in self.grads])
-
-    def mul(self, op):
-        if np.isscalar(op):
-            for grad in self.grads:
-                grad.mul(op)
-        elif isinstance(op, torch.Tensor):
-            op = op.view(-1)
-            for i, grad in enumerate(self.grads):
-                grad.mul(op[i])
-        else:
-            raise NotImplementedError
-        return self
-
-    def add(self, op):
-        if np.isscalar(op):
-            for grad in self.grads:
-                grad.mul(op)
-        elif isinstance(op, Grads):
-            for grad, op_grad in zip(self.grads, op.grads):
-                grad.add(op_grad)
-        elif isinstance(op, torch.Tensor):
-            op = op.view(-1)
-            for i, grad in enumerate(self.grads):
-                grad.mul(op[i])
-        else:
-            raise NotImplementedError
-        return self
-
-    def mean(self):
-        grad = self.grads[0].clone()
-        grad.zero()
-        for g in self.grads:
-            grad.add(g)
-        grad.mul(1 / len(self.grads))
-        return grad
-
-
-def escape_float(x):
-    return ('%s' % x).replace('.', '\.')

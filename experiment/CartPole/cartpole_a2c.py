@@ -192,7 +192,7 @@ def main():
                   "the last episode runs to {} time steps!".format(running_reward, t))
             break
 
-    agent.save('./ckpt/CartPole', i_episode)
+    agent.save('./ckpt/'+args.task, i_episode)
 
 if __name__ == '__main__':
     main()

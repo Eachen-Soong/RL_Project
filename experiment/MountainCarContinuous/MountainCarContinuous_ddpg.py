@@ -1,4 +1,5 @@
 import argparse
+from typing import Any
 import gym
 import numpy as np
 from collections import namedtuple
@@ -8,42 +9,215 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-from utils import Logger
+from utils import *
+from networks import MLP
 
 
-# continuous observation space and action space
+# this policy network only returns action, no value
 class DefaultPolicy(nn.Module):
-    """
-    implements both actor and critic in one model
-    """
-    def __init__(self, state_space_dim, action_num, hidden_dim=128, scale=1.):
+    def __init__(self, state_space_dim, action_dim, num_layers=4, hidden_dim=128) -> None:
         super(DefaultPolicy, self).__init__()
-        self.affine1 = nn.Linear(state_space_dim, hidden_dim)
-
-        # actor's layer
-        self.action_head = nn.Linear(hidden_dim, action_num)
-        self.scale = scale
-
-        # critic's layer
-        self.value_head = nn.Linear(hidden_dim, 1)
-
+        self.mlp = MLP(state_space_dim, action_dim, num_layers, hidden_dim)
+    
     def forward(self, x):
-        """
-        forward of both actor and critic
-        """
-        x = F.relu(self.affine1(x))
+        return self.mlp(x)
 
-        # actor: choses action to take from state s_t
-        action = self.scale * F.tanh(self.action_head(x))
 
-        # critic: evaluates being in the state s_t
-        state_values = self.value_head(x)
+class DefaultQNetwork(nn.Module):
+    def __init__(self, state_space_dim, action_dim, num_layers=4, hidden_dim=128) -> None:
+        super(DefaultQNetwork, self).__init__()
+        self.mlp = MLP(state_space_dim + action_dim, 1, num_layers, hidden_dim)
+    
+    def forward(self, x, a):
+        x = torch.cat([x, a], dim=1)
+        return self.mlp(x)
+    
+    def get_action_value(self, x, a):
+        x = torch.cat([x, a], dim=1)
+        return self.mlp(x)
+    
+    def get_action_value_batch(self, x, a):
+        x = torch.cat([x, a], dim=1)
+        return self.mlp(x)
+    
+    def get_action_value_batch_2(self, x, a):
+        x = torch.cat([x, a], dim=1)
+        return self.mlp(x)
 
-        return action, state_values
+# save, load, eval_step, eval_episode, eval_episodes, record_online_return, switch_task
+
+class BaseAgent:
+    def __init__(self, config):
+        self.config = config
+        self.logger = get_logger(tag=config.tag, log_level=config.log_level)
+        self.task_ind = 0
+
+    def close(self):
+        close_obj(self.task)
+
+    def eval_episode(self):
+        env = self.config.eval_env
+        state = env.reset()
+        while True:
+            action = self.eval_step(state)
+            state, reward, done, info = env.step(action)
+            ret = info[0]['episodic_return']
+            if ret is not None:
+                break
+        return ret
+
+    def eval_episodes(self):
+        episodic_returns = []
+        for ep in range(self.config.eval_episodes):
+            total_rewards = self.eval_episode()
+            episodic_returns.append(np.sum(total_rewards))
+        self.logger.info('steps %d, episodic_return_test %.2f(%.2f)' % (
+            self.total_steps, np.mean(episodic_returns), np.std(episodic_returns) / np.sqrt(len(episodic_returns))
+        ))
+        self.logger.add_scalar('episodic_return_test', np.mean(episodic_returns), self.total_steps)
+        return {
+            'episodic_return_test': np.mean(episodic_returns),
+        }
+
+    def record_online_return(self, info, offset=0):
+        if isinstance(info, dict):
+            ret = info['episodic_return']
+            if ret is not None:
+                self.logger.add_scalar('episodic_return_train', ret, self.total_steps + offset)
+                self.logger.info('steps %d, episodic_return_train %s' % (self.total_steps + offset, ret))
+        elif isinstance(info, tuple):
+            for i, info_ in enumerate(info):
+                self.record_online_return(info_, i)
+        else:
+            raise NotImplementedError
+
+    def switch_task(self):
+        config = self.config
+        if not config.tasks:
+            return
+        segs = np.linspace(0, config.max_steps, len(config.tasks) + 1)
+        if self.total_steps > segs[self.task_ind + 1]:
+            self.task_ind += 1
+            self.task = config.tasks[self.task_ind]
+            self.states = self.task.reset()
+            self.states = config.state_normalizer(self.states)
+
+    def record_episode(self, dir, env):
+        mkdir(dir)
+        steps = 0
+        state = env.reset()
+        while True:
+            self.record_obs(env, dir, steps)
+            action = self.record_step(state)
+            state, reward, done, info = env.step(action)
+            ret = info[0]['episodic_return']
+            steps += 1
+            if ret is not None:
+                break
+
+    def record_step(self, state):
+        raise NotImplementedError
+
+    # For DMControl
+    def record_obs(self, env, dir, steps):
+        env = env.env.envs[0]
+        obs = env.render(mode='rgb_array')
+        imsave('%s/%04d.png' % (dir, steps), obs)
+
+
+class DDPGAgent(BaseAgent):
+    def __init__(self, config):
+        BaseAgent.__init__(self, config)
+        self.config = config
+        self.task = config.task_fn()
+        self.network = config.network_fn()
+        self.target_network = config.network_fn()
+        self.target_network.load_state_dict(self.network.state_dict())
+        self.replay = config.replay_fn()
+        self.random_process = config.random_process_fn()
+        self.total_steps = 0
+        self.state = None
+
+    def soft_update(self, target, src):
+        for target_param, param in zip(target.parameters(), src.parameters()):
+            target_param.detach_()
+            target_param.copy_(target_param * (1.0 - self.config.target_network_mix) +
+                               param * self.config.target_network_mix)
+
+    def eval_step(self, state):
+        self.config.state_normalizer.set_read_only()
+        state = self.config.state_normalizer(state)
+        action = self.network(state)
+        self.config.state_normalizer.unset_read_only()
+        return action
+
+    def step(self):
+        config = self.config
+        if self.state is None:
+            self.random_process.reset_states()
+            self.state = self.task.reset()
+            self.state = config.state_normalizer(self.state)
+
+        if self.total_steps < config.warm_up:
+            action = [self.task.action_space.sample()]
+        else:
+            action = self.network(self.state)
+            action = to_np(action)
+            action += self.random_process.sample()
+        action = np.clip(action, self.task.action_space.low, self.task.action_space.high)
+        next_state, reward, done, info = self.task.step(action)
+        next_state = self.config.state_normalizer(next_state)
+        self.record_online_return(info)
+        reward = self.config.reward_normalizer(reward)
+
+        self.replay.feed(dict(
+            state=self.state,
+            action=action,
+            reward=reward,
+            next_state=next_state,
+            mask=1-np.asarray(done, dtype=np.int32),
+        ))
+
+        if done[0]:
+            self.random_process.reset_states()
+        self.state = next_state
+        self.total_steps += 1
+
+        if self.replay.size() >= config.warm_up:
+            transitions = self.replay.sample()
+            states = tensor(transitions.state)
+            actions = tensor(transitions.action)
+            rewards = tensor(transitions.reward).unsqueeze(-1)
+            next_states = tensor(transitions.next_state)
+            mask = tensor(transitions.mask).unsqueeze(-1)
+
+            phi_next = self.target_network.feature(next_states)
+            a_next = self.target_network.actor(phi_next)
+            q_next = self.target_network.critic(phi_next, a_next)
+            q_next = config.discount * mask * q_next
+            q_next.add_(rewards)
+            q_next = q_next.detach()
+            phi = self.network.feature(states)
+            q = self.network.critic(phi, actions)
+            critic_loss = (q - q_next).pow(2).mul(0.5).sum(-1).mean()
+
+            self.network.zero_grad()
+            critic_loss.backward()
+            self.network.critic_opt.step()
+
+            phi = self.network.feature(states)
+            action = self.network.actor(phi)
+            policy_loss = -self.network.critic(phi.detach(), action).mean()
+
+            self.network.zero_grad()
+            policy_loss.backward()
+            self.network.actor_opt.step()
+
+            self.soft_update(self.target_network, self.network)
 
 
 class DDPGAgent(object):
-    def __init__(self, obs_shape, action_shape, gamma, device, model_type='default', name='A2C'):
+    def __init__(self, obs_shape, action_shape, gamma, device, model_type='default', name='DDPG'):
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.device = device
@@ -152,7 +326,7 @@ def main():
     running_reward = 10
     agent = DDPGAgent(obs_shape=env.observation_space.shape[0], action_shape=env.action_space.shape[0], gamma=args.gamma, model_type=args.model_type, device=args.device)
     optimizer = optim.Adam(agent.model.parameters(), lr=3e-2)
-    logger = Logger(log_dir='./logs/'+args.task+'/'+args.model_type+'/a2c')
+    logger = Logger(log_dir='./logs/'+args.model_type+'/'+args.task+'/a2c')
 
     for i_episode in range(args.train_eps):
         state = env.reset()
