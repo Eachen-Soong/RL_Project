@@ -35,7 +35,7 @@ class DefaultQNetwork(nn.Module):
     def get_action_value(self, x, a):
         x = torch.cat([x, a], dim=1)
         return self.mlp(x)
-    
+
     def get_action_value_batch(self, x, a):
         x = torch.cat([x, a], dim=1)
         return self.mlp(x)
