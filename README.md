@@ -27,5 +27,5 @@ You may also specify the seed value by adding `--seed`and `--random_seed` flags 
 ### Test your models
 After trained a model, you can test it. Example:
 ```
-python Pendulum/DDPG.py --mode=test --tau=0.005 --exploration_noise=0.1
+python Pendulum/DDPG.py --mode=test --record_test=True --tau=0.005 --exploration_noise=0.1
 ```

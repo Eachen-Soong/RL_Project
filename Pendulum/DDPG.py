@@ -30,6 +30,8 @@ parser.add_argument("--env_name", default="Pendulum-v1")
 parser.add_argument('--tau',  default=0.005, type=float) # target smoothing coefficient
 parser.add_argument('--target_update_interval', default=1, type=int)
 parser.add_argument('--test_iteration', default=10, type=int)
+parser.add_argument('--record_tests', default=False, type=bool)
+
 
 parser.add_argument('--learning_rate', default=1e-4, type=float)
 parser.add_argument('--gamma', default=0.99, type=int) # discounted factor
@@ -227,6 +229,7 @@ def main():
     global state, img, agent, env, done
     print("cuda: ", torch.cuda.is_available())
     agent = DDPG(state_dim, action_dim, max_action)
+    running_reward = 0
     ep_r = 0
     if args.mode == 'test':
         agent.load()
@@ -236,7 +239,8 @@ def main():
             done = False
             img = ax.imshow(env.render('rgb_array'))
             ani = FuncAnimation(fig, update, frames=args.max_step, blit=True, interval=10)
-            ani.save('videos/MountainCarDDPG_'+str(i)+'.mp4', writer='ffmpeg', fps=30)
+            if args.record_tests:
+                ani.save('videos/MountainCarDDPG_'+str(i)+'.mp4', writer='ffmpeg', fps=20)
             plt.show()
             env.close()
 
@@ -264,6 +268,11 @@ def main():
             total_step += step+1
             print("Total T:{} Episode: \t{} Total Reward: \t{:0.2f}".format(total_step, i, total_reward))
             agent.update()
+            if i==0: running_reward = total_reward
+            running_reward = 0.05 * total_reward + (1 - 0.05) * running_reward
+            agent.writer.add_scalar('Reward/train', total_reward, global_step=i)
+            agent.writer.add_scalar('Running_Reward/train', running_reward, global_step=i)
+
            # "Total T: %d Episode Num: %d Episode T: %d Reward: %f
 
             if i % args.log_interval == 0:
