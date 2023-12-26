@@ -1,43 +1,31 @@
-## RL Final Project1: Starter Code
+## RL Final Project
 
-We provide the starter code based on PyTorch for the interaction with different gym environments. 
-
-You are encouraged to use the code style provided but feel free to complete the entire code by yourself.
+We tested different algorithms on different gym environments (cliff walking, pendulum, and mountain car continuous).
 
 ### Getting started
 
 To start with, you can run the following command to create an anaconda environment and install required dependencies.
 
 ```
-conda env create -f conda_env.yal
-```
-
-After this installation you can activate your environment with:
-
-```
-source activate env_name
+pip install -r requirements.txt
 ```
 
 ### Instructions
 
-To train an agent for specific target task, you may enter the target task folder which has `train.py`, and run the following command.
+In Linux system, you can use the scripts in `./scripts` to search adquate hyperparameters. Example:
+```
+bash scripts/MountainCarDDPGSearch.sh
+```
+To train an agent for specific target task, you may enter the target task folder, and run the following command. Example:
 
 ```
-python train.py \
-	--task target_task \
-	--train_eps 100
+python Pendulum/DDPG.py --max_episode=10000 --tau=0.005 --exploration_noise=0.1
 ```
 
 You may also specify the seed value by adding `--seed`and `--random_seed` flags after the command above. You may customize other flags for convenience as well.
 
-### Results
-
-You are encouraged to use Tensorboard to trace your training results, with which you should find logs in the working directory you specified. You can monitor your training by entering the target working directory and run the following command.
-
+### Test your models
+After trained a model, you can test it. Example:
 ```
-tensorboard --logdir .
+python Pendulum/DDPG.py --mode=test --tau=0.005 --exploration_noise=0.1
 ```
-
-You will be able to see plots by opening up tensorboard in your browser.
-
-Or instead, you can simply output the results in your console, and maintain a buffer to record the variables during training process. Either way, plots of training variables will be great help for your analysis on your code.

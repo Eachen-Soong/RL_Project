@@ -1,0 +1,7 @@
+torch>=1.6
+gym==0.25
+numpy>=1.20
+matplotlib>=3.0
+itertools
+tensorboardX
+argparse
