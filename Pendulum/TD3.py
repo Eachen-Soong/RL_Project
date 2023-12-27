@@ -13,6 +13,7 @@ import torch.optim as optim
 from torch.distributions import Normal
 from tensorboardX import SummaryWriter
 
+
 '''
 Implementation of Deep Deterministic Policy Gradients (DDPG) with pytorch 
 riginal paper: https://arxiv.org/abs/1509.02971
@@ -250,6 +251,7 @@ class TD3():
 
 def main():
     agent = TD3(state_dim, action_dim, max_action)
+    running_reward = 0
     ep_r = 0
     if args.mode == 'test':
         agent.load()
@@ -290,6 +292,10 @@ def main():
             total_step += step+1
             print("Total T:{} Episode: \t{} Total Reward: \t{:0.2f}".format(total_step, i, total_reward))
             agent.update()
+            if i==0: running_reward = total_reward
+            running_reward = 0.05 * total_reward + (1 - 0.05) * running_reward
+            agent.writer.add_scalar('Reward/train', total_reward, global_step=i)
+            agent.writer.add_scalar('Running_Reward/train', running_reward, global_step=i)
            # Total T: %d Episode Num: %d Episode T: %d Reward: %f
 
             if i % args.log_interval == 0:
