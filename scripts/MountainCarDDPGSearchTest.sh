@@ -6,6 +6,6 @@ do
     for noise in "${exploration_noises[@]}"
     do
         echo "Running with tau=$tau and exploration_noise=$noise"
-        python MountainCar/DDPG.py --max_episode 300 --tau $tau --exploration_noise $noise --seed True
+        python MountainCar/DDPG.py --mode test --max_episode 300 --tau $tau --exploration_noise $noise --seed True
     done
 done

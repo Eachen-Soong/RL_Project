@@ -13,7 +13,7 @@ from tensorboardX import SummaryWriter
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-import time
+import copy
 
 '''
 Implementation of Deep Deterministic Policy Gradients (DDPG) with pytorch 
@@ -27,7 +27,7 @@ parser.add_argument('--mode', default='train', type=str) # mode = 'train' or 'te
 # Note that DDPG is feasible about hyper-parameters.
 # You should fine-tuning if you change to another environment.
 parser.add_argument("--env_name", default="MountainCarContinuous-v0")
-parser.add_argument('--tau',  default=0.005, type=float) # target smoothing coefficient
+parser.add_argument('--tau',  default=0.01, type=float) # target smoothing coefficient
 parser.add_argument('--target_update_interval', default=1, type=int)
 parser.add_argument('--test_iteration', default=10, type=int)
 parser.add_argument('--record_tests', default=False, type=bool)
@@ -216,33 +216,41 @@ class DDPG(object):
         print("====================================")
 
 def update(frame):
-    global state, done
+    global state, done, total_reward
     if done:
         return [img]
     action = agent.select_action(state)
     next_state, reward, done, _ = env.step(action)
+    total_reward += reward
     state = next_state
     img.set_data(env.render('rgb_array'))
     return [img]
 
 def main():
-    global state, img, agent, env, done
+    global state, img, agent, env, done, total_reward
     print("cuda: ", torch.cuda.is_available())
     agent = DDPG(state_dim, action_dim, max_action)
     running_reward = 0
     ep_r = 0
     if args.mode == 'test':
         agent.load()
+        total_rewards = []
         for i in range(args.test_iteration):
+            total_reward = 0
             fig, ax = plt.subplots()
             state = env.reset()
             done = False
             img = ax.imshow(env.render('rgb_array'))
             ani = FuncAnimation(fig, update, frames=args.max_step, blit=True, interval=10)
             if args.record_tests:
-                ani.save('videos/MountainCarDDPG_'+str(i)+'.mp4', writer='ffmpeg', fps=20)
+                video_path = 'videos/MountainCarDDPG_' +str(i)+'.mp4'
+                ani.save(video_path, writer='ffmpeg', fps=20)
             plt.show()
             env.close()
+            tmp = copy.copy(total_reward)
+            total_rewards.append(tmp)
+        avg_reward = np.mean(np.array(total_rewards))
+        agent.writer.add_scalar('Average_Reward/test', avg_reward, global_step=i)
 
     elif args.mode == 'train':
         if args.load: agent.load()
