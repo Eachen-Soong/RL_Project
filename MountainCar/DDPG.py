@@ -269,11 +269,12 @@ def main():
                 agent.replay_buffer.push((state, next_state, action, reward, done))
 
                 state = next_state
+                # if reward > 0: print("done: ", done, "reward: ", reward)
+                total_reward += reward
                 if done:
                     break
                 step += 1
-                total_reward += reward
-            total_step += step+1
+            total_step += step + 1
             print("Total T:{} Episode: \t{} Total Reward: \t{:0.2f}".format(total_step, i, total_reward))
             agent.update()
             if i==0: running_reward = total_reward
@@ -281,7 +282,7 @@ def main():
             agent.writer.add_scalar('Reward/train', total_reward, global_step=i)
             agent.writer.add_scalar('Running_Reward/train', running_reward, global_step=i)
 
-           # "Total T: %d Episode Num: %d Episode T: %d Reward: %f
+            # "Total T: %d Episode Num: %d Episode T: %d Reward: %f
 
             if i % args.log_interval == 0:
                 agent.save()

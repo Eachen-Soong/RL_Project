@@ -20,7 +20,7 @@ if __name__ == '__main__':
     agent = SAC_Agent()
 
     # Set the number of episodes for training
-    EPISODE = 200
+    EPISODE = 1000
     print_once = True  # A flag to control print statements
     score_list = []  # List to store scores for each episode
 

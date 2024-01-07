@@ -60,7 +60,7 @@ class SAC_Agent:
         self.gamma = 0.999  # discount factor for reward
         self.batch_size = 200  # size of the sampled mini-batch from the buffer
         self.buffer_limit = 100000  # limit of the replay buffer
-        self.tau = 0.005  # soft-update hyperparameter for Q-target
+        self.tau = 0.01  # soft-update hyperparameter for Q-target
         self.init_alpha = 0.01  # initial value for the entropy coefficient alpha
         self.target_entropy = -self.action_dim  # target entropy for alpha optimization
         self.lr_alpha = 0.005  # learning rate for entropy coefficient alpha

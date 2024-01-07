@@ -46,10 +46,10 @@ parser.add_argument('--policy_noise', default=0.2, type=float)
 parser.add_argument('--noise_clip', default=0.5, type=float)
 parser.add_argument('--policy_delay', default=2, type=int)
 parser.add_argument('--exploration_noise', default=0.7, type=float)
-parser.add_argument('--max_episode', default=10000, type=int) # num of games
+parser.add_argument('--max_episode', default=1000, type=int) # num of games
 parser.add_argument('--print_log', default=5, type=int)
 parser.add_argument('--update_iteration', default=200, type=int)
-parser.add_argument('--max_length_of_trajectory', default=2000, type=int)
+parser.add_argument('--max_length_of_trajectory', default=999, type=int)
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -285,10 +285,10 @@ def main():
                 state = next_state
                 step += 1
                 total_reward += reward
-                # print(reward)
                 if done:
                     break
             total_step += step+1
+            # print("done: ", done, "reward: ", reward)
             print("Total T:{} Episode: \t{} Total Reward: \t{:0.2f}".format(total_step, i, total_reward))
             agent.update()
             if i==0: running_reward = total_reward

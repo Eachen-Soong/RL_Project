@@ -269,10 +269,10 @@ def main():
                 agent.replay_buffer.push((state, next_state, action, reward, done))
 
                 state = next_state
+                total_reward += reward
                 if done:
                     break
                 step += 1
-                total_reward += reward
             total_step += step+1
             print("Total T:{} Episode: \t{} Total Reward: \t{:0.2f}".format(total_step, i, total_reward))
             agent.update()
